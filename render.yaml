@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: slidify-app
+    env: static
+    buildCommand: npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /upload
+        destination: /index.html
+      - type: rewrite
+        source: /upload/*
+        destination: /index.html
+      - type: rewrite
+        source: /(.*)
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: 18.0.0

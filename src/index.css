@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom slider styles */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  background: linear-gradient(to right, #2563eb 0%, #0891b2 var(--progress, 0%), #e5e7eb var(--progress, 0%), #e5e7eb 100%);
+  border-radius: 4px;
+  outline: none;
+}
+
+.dark .slider {
+  background: linear-gradient(to right, #2563eb 0%, #0891b2 var(--progress, 0%), #4b5563 var(--progress, 0%), #4b5563 100%);
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #0891b2);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  background: linear-gradient(135deg, #1d4ed8, #0e7490);
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.slider::-moz-range-thumb {
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #0891b2);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.slider::-moz-range-thumb:hover {
+  background: linear-gradient(135deg, #1d4ed8, #0e7490);
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Drag and drop styles */
+.dragging {
+  opacity: 0.5;
+  transform: rotate(5deg) scale(0.95);
+  z-index: 1000;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+}
+
+.drag-over {
+  transform: scale(1.05);
+  box-shadow: 0 0 0 2px #8B5CF6, 0 0 20px rgba(139, 92, 246, 0.3);
+}
+
+.dark .drag-over {
+  background: rgba(139, 92, 246, 0.2);
+}
+
+.drag-over {
+  background: rgba(139, 92, 246, 0.1);
+}
+
+/* Custom scrollbar styles */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #2563eb, #0891b2);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #1d4ed8, #0e7490);
+}
+
+/* Dark mode custom scrollbar */
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+/* Firefox scrollbar support */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #2563eb #f1f5f9;
+}
+
+.dark .custom-scrollbar {
+  scrollbar-color: #2563eb #374151;
+}
+
+/* Select dropdown scrollbar styles */
+select::-webkit-scrollbar {
+  width: 8px;
+}
+
+select::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+select::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #2563eb, #0891b2);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+select::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #1d4ed8, #0e7490);
+}
+
+/* Dark mode select scrollbar */
+.dark select::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+/* Firefox select scrollbar support */
+select {
+  scrollbar-width: thin;
+  scrollbar-color: #2563eb #f1f5f9;
+}
+
+.dark select {
+  scrollbar-color: #2563eb #374151;
+}

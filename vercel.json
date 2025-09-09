@@ -1,0 +1,41 @@
+{
+  "rewrites": [
+    {
+      "source": "/upload",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/upload/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/upload",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/upload/(.*)",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
+}
