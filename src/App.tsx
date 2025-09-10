@@ -522,7 +522,6 @@ export default function App() {
 
   const fetchUserSlideshows = async () => {
     if (!user) return;
-    console.log('Fetching slideshows for user:', user.id);
     const { data, error } = await supabase
       .from("slideshows")
       .select("*")
@@ -531,7 +530,6 @@ export default function App() {
     if (error) {
       console.error("Error fetching slideshows:", error);
     } else {
-      console.log('Fetched user slideshows:', data?.length || 0);
       setUserSlideshows(data || []);
     }
   };
@@ -584,15 +582,12 @@ export default function App() {
     
     try {
       const anonymousSlideshows = getAnonymousSlideshows();
-      console.log('Found anonymous slideshows to transfer:', anonymousSlideshows.length);
       
       if (anonymousSlideshows.length === 0) return;
 
       // Create new slideshows for the user (simpler approach)
       const createPromises = anonymousSlideshows.map(async (slideshow) => {
         try {
-          console.log('Creating slideshow for user:', slideshow.id, 'to user:', user.id);
-          
           // Create a new slideshow with the user's ID
           const { data: newSlideshow, error: createError } = await supabase
             .from('slideshows')
@@ -613,7 +608,6 @@ export default function App() {
             return null;
           }
           
-          console.log('Successfully created slideshow for user:', newSlideshow.id);
           return newSlideshow;
         } catch (err) {
           console.error('Error creating slideshow:', err);
@@ -623,7 +617,6 @@ export default function App() {
 
       const results = await Promise.all(createPromises);
       const successfulTransfers = results.filter(Boolean);
-      console.log('Successfully transferred slideshows:', successfulTransfers.length);
 
       if (successfulTransfers.length > 0) {
         // Clear anonymous slideshows from localStorage
@@ -635,7 +628,6 @@ export default function App() {
         
         // Then refresh from database to ensure consistency
         setTimeout(async () => {
-          console.log('Refreshing user slideshows from database...');
           await fetchUserSlideshows();
           
           // If database fetch still returns 0, try a different approach
@@ -646,10 +638,7 @@ export default function App() {
             .order("created_at", { ascending: false });
           
           if (!fallbackError && fallbackData && fallbackData.length > 0) {
-            console.log('Fallback fetch successful, found slideshows:', fallbackData.length);
             setUserSlideshows(fallbackData);
-          } else {
-            console.log('Fallback fetch also returned 0 slideshows');
           }
         }, 1000);
         
@@ -915,11 +904,9 @@ export default function App() {
         data = result.data;
         error = result.error;
       } else {
-        console.log('Creating new slideshow with data:', slideshowData);
         const result = await supabase.from("slideshows").insert([slideshowData]).select().single();
         data = result.data;
         error = result.error;
-        console.log('Slideshow creation result:', { data, error });
       }
 
       if (error) {
@@ -937,7 +924,6 @@ export default function App() {
 
       // If user is not authenticated, also save to localStorage for anonymous tracking
       if (!user) {
-        console.log('Saving anonymous slideshow to localStorage:', data);
         saveAnonymousSlideshow(data);
         
         // Verify the slideshow was saved to database
@@ -949,8 +935,6 @@ export default function App() {
         
         if (verifyError) {
           console.error('Error verifying slideshow in database:', verifyError);
-        } else {
-          console.log('Slideshow verified in database:', verifyData);
         }
       }
 

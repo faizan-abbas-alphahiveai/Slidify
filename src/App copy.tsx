@@ -417,14 +417,7 @@ export default function App() {
         
         const location = 'images_section';
         
-        console.log('Calling getSubscriptionMessage with:');
-        console.log('  subscriptionType:', subscriptionType);
-        console.log('  location:', location);
-        console.log('  user exists:', !!user);
-        console.log('  isPremium:', isPremium);
-        
         const message = await getSubscriptionMessage(subscriptionType, location);
-        console.log('Retrieved subscription message for images section:', message);
         setImagesSubscriptionMessage(message);
       } catch (error) {
         console.error("Error loading subscription message:", error);
@@ -436,12 +429,7 @@ export default function App() {
         const subscriptionType = !user ? 'unauthenticated' : (isPremium ? 'premium' : 'authenticated');
         const location = 'music_section';
         
-        console.log('Calling getSubscriptionMessage for music with:');
-        console.log('  subscriptionType:', subscriptionType);
-        console.log('  location:', location);
-        
         const message = await getSubscriptionMessage(subscriptionType, location);
-        console.log('  returned music message:', message);
         
         setMusicSubscriptionMessage(message);
       } catch (error) {

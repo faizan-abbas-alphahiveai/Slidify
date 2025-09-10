@@ -75,7 +75,6 @@ export default function CollaborativeUploadPage() {
           filter: `id=eq.${session.id}`
         },
         (payload) => {
-          console.log('Session updated via real-time:', payload);
           if (payload.new) {
             setSession(payload.new as UploadSession);
           }
@@ -91,7 +90,6 @@ export default function CollaborativeUploadPage() {
         },
         (payload) => {
           // When a new image is uploaded, refresh the session to get updated counts
-          console.log('New image uploaded via real-time:', payload);
           debouncedRefresh(sessionToken);
         }
       )
@@ -105,7 +103,6 @@ export default function CollaborativeUploadPage() {
         },
         (payload) => {
           // When an image is deleted, refresh the session to get updated counts
-          console.log('Image deleted, refreshing session data...');
           debouncedRefresh(sessionToken);
         }
       )
@@ -127,11 +124,9 @@ export default function CollaborativeUploadPage() {
     const interval = setInterval(() => {
       // Don't refresh if user is currently uploading
       if (isUploading || selectedImages.length > 0) {
-        console.log('Skipping periodic refresh - user is uploading');
         return;
       }
       
-      console.log('Periodic refresh of session data...');
       loadSession(sessionToken);
     }, 30000); // Refresh every 30 seconds instead of 5
 
@@ -146,7 +141,6 @@ export default function CollaborativeUploadPage() {
     
     const timeout = setTimeout(() => {
       if (!isUploading) {
-        console.log('Debounced refresh of session data...');
         loadSession(token);
       }
     }, 2000); // Wait 2 seconds before refreshing

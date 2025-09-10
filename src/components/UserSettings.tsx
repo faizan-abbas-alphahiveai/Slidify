@@ -41,12 +41,6 @@ export default function UserSettings({ isOpen, onClose }: UserSettingsProps) {
 
     try {
       setError(null);
-      
-      console.log('Loading profile for user:', {
-        id: user.id,
-        email: user.email,
-        hasUser: !!user
-      });
 
       // First try to get data from the users table
       const { data, error } = await supabase
@@ -59,7 +53,6 @@ export default function UserSettings({ isOpen, onClose }: UserSettingsProps) {
         console.error('Error loading user profile:', error);
         
         // Try alternative query approaches
-        console.log('Trying alternative query approaches...');
         
         // Try without the ID filter first
         try {
@@ -70,8 +63,6 @@ export default function UserSettings({ isOpen, onClose }: UserSettingsProps) {
           
           if (allUsersError) {
             console.error('Error querying all users:', allUsersError);
-          } else {
-            console.log('All users in table:', allUsers);
           }
         } catch (altErr) {
           console.error('Alternative query failed:', altErr);
@@ -81,7 +72,6 @@ export default function UserSettings({ isOpen, onClose }: UserSettingsProps) {
       }
 
       if (data) {
-        console.log('User profile data loaded:', data);
         const userProfileData = {
           first_name: data.first_name || '',
           last_name: data.last_name || '',
@@ -90,7 +80,6 @@ export default function UserSettings({ isOpen, onClose }: UserSettingsProps) {
         setProfile(userProfileData);
         setOriginalProfile(userProfileData);
       } else {
-        console.log('No user profile found, creating basic profile');
         // If no data in users table, create a basic profile with just email
         // The names will be empty and user can fill them in
         const userProfileData = {
@@ -117,8 +106,6 @@ export default function UserSettings({ isOpen, onClose }: UserSettingsProps) {
           if (createError) {
             console.error('Error creating user profile:', createError);
             // Silently handle creation error - user can still edit and save
-          } else {
-            console.log('User profile created successfully');
           }
         } catch (createErr) {
           console.error('Error creating user profile:', createErr);
