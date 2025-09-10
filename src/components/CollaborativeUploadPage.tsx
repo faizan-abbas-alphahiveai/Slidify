@@ -30,6 +30,7 @@ export default function CollaborativeUploadPage() {
   const [success, setSuccess] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [tagline, setTagline] = useState('Create beautiful slideshows with a few simple clicks');
+  const [refreshTimeout, setRefreshTimeout] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Get session token from URL
@@ -74,17 +75,84 @@ export default function CollaborativeUploadPage() {
           filter: `id=eq.${session.id}`
         },
         (payload) => {
+          console.log('Session updated via real-time:', payload);
           if (payload.new) {
             setSession(payload.new as UploadSession);
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'upload_session_images',
+          filter: `upload_session_id=eq.${session.id}`
+        },
+        (payload) => {
+          // When a new image is uploaded, refresh the session to get updated counts
+          console.log('New image uploaded via real-time:', payload);
+          debouncedRefresh(sessionToken);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'upload_session_images',
+          filter: `upload_session_id=eq.${session.id}`
+        },
+        (payload) => {
+          // When an image is deleted, refresh the session to get updated counts
+          console.log('Image deleted, refreshing session data...');
+          debouncedRefresh(sessionToken);
         }
       )
       .subscribe();
 
     return () => {
       sessionChannel.unsubscribe();
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
     };
-  }, [session?.id]);
+  }, [session?.id, sessionToken]);
+
+  // Fallback: Periodic refresh every 30 seconds to ensure counts are up to date
+  // Only refresh if not currently uploading to avoid disrupting uploads
+  useEffect(() => {
+    if (!session || !sessionToken) return;
+
+    const interval = setInterval(() => {
+      // Don't refresh if user is currently uploading
+      if (isUploading || selectedImages.length > 0) {
+        console.log('Skipping periodic refresh - user is uploading');
+        return;
+      }
+      
+      console.log('Periodic refresh of session data...');
+      loadSession(sessionToken);
+    }, 30000); // Refresh every 30 seconds instead of 5
+
+    return () => clearInterval(interval);
+  }, [session?.id, sessionToken, isUploading, selectedImages.length]);
+
+  // Debounced refresh function to prevent too frequent updates
+  const debouncedRefresh = (token: string) => {
+    if (refreshTimeout) {
+      clearTimeout(refreshTimeout);
+    }
+    
+    const timeout = setTimeout(() => {
+      if (!isUploading) {
+        console.log('Debounced refresh of session data...');
+        loadSession(token);
+      }
+    }, 2000); // Wait 2 seconds before refreshing
+    
+    setRefreshTimeout(timeout);
+  };
 
   const loadSession = async (token: string) => {
     try {
@@ -171,9 +239,20 @@ export default function CollaborativeUploadPage() {
       return;
     }
 
+    // Check session upload limit (100 images total)
     const remainingSlots = session.max_uploads - session.current_uploads;
     const availableSlots = Math.max(0, remainingSlots - selectedImages.length);
+    
+    if (availableSlots <= 0) {
+      setError(`Upload limit reached! This session allows a maximum of ${session.max_uploads} images. Currently at ${session.current_uploads}/${session.max_uploads}.`);
+      return;
+    }
+    
     const filesToAdd = validFiles.slice(0, availableSlots);
+    
+    if (filesToAdd.length < validFiles.length) {
+      setError(`Only ${filesToAdd.length} of ${validFiles.length} files can be added. Session limit: ${session.current_uploads}/${session.max_uploads} images.`);
+    }
     
     setSelectedImages(prev => [...prev, ...filesToAdd]);
     
@@ -188,6 +267,13 @@ export default function CollaborativeUploadPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session || !sessionToken || selectedImages.length === 0) return;
+
+    // Check if upload would exceed the session limit
+    const totalUploads = session.current_uploads + selectedImages.length;
+    if (totalUploads > session.max_uploads) {
+      setError(`Upload would exceed the limit of ${session.max_uploads} images. You can only upload ${session.max_uploads - session.current_uploads} more images.`);
+      return;
+    }
 
     try {
       setIsUploading(true);
@@ -428,20 +514,21 @@ export default function CollaborativeUploadPage() {
           )}
         </div>
 
-        {/* Session Info */}
+        {/* Session Info - COMMENTED OUT */}
+        {/* 
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6 transition-colors">
           <div className="mb-4">
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Images</h2>
           </div>
           
           <div className="grid grid-cols-2 gap-4 text-center mb-4">
-            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <div className="rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
               <p className="text-2xl font-bold text-gray-800 dark:text-white">
                 {session.current_uploads}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-300">Images uploaded</p>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <div className="rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
               <p className="text-2xl font-bold text-gray-800 dark:text-white">
                 {remainingSlots}
               </p>
@@ -449,18 +536,20 @@ export default function CollaborativeUploadPage() {
             </div>
           </div>
           
-
-
-          {/* Progress Bar */}
-          <div className="mt-4">
-            <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-              <div
-                className="bg-gradient-to-r from-blue-600 to-cyan-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${(session.current_uploads / session.max_uploads) * 100}%` }}
+          <div className="mb-4">
+            <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
+              <span>Upload Progress</span>
+              <span>{session.current_uploads} / {session.max_uploads}</span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div 
+                className="h-2 rounded-full transition-all duration-300 bg-blue-500"
+                style={{ width: `${Math.min(100, (session.current_uploads / session.max_uploads) * 100)}%` }}
               />
             </div>
           </div>
         </div>
+        */}
 
         {/* Upload Form */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 transition-colors">
@@ -573,13 +662,7 @@ export default function CollaborativeUploadPage() {
                       {/* File size progress bar */}
                       <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
                         <div
-                          className={`h-2 rounded-full transition-all duration-300 ${
-                            selectedImages.reduce((total, file) => total + file.size, 0) > 80 * 1024 * 1024 
-                              ? 'bg-red-500' 
-                              : selectedImages.reduce((total, file) => total + file.size, 0) > 60 * 1024 * 1024 
-                                ? 'bg-yellow-500' 
-                                : 'bg-green-500'
-                          }`}
+                          className="h-2 rounded-full transition-all duration-300 bg-green-500"
                           style={{ 
                             width: `${Math.min((selectedImages.reduce((total, file) => total + file.size, 0) / (100 * 1024 * 1024)) * 100, 100)}%` 
                           }}
@@ -589,14 +672,6 @@ export default function CollaborativeUploadPage() {
                         {formatFileSize(selectedImages.reduce((total, file) => total + file.size, 0))} / 100 MB
                       </div>
                       
-                      {/* File size warning */}
-                      {selectedImages.reduce((total, file) => total + file.size, 0) > 80 * 1024 * 1024 && (
-                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg px-3 py-2">
-                          <p className="text-yellow-800 dark:text-yellow-200 text-xs text-center">
-                            ⚠️ You're approaching the 100MB limit. Consider using smaller images or fewer files.
-                          </p>
-                        </div>
-                      )}
                     </div>
                     
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

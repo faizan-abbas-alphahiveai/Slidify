@@ -64,6 +64,18 @@ CREATE POLICY "Session creators can view uploaded images"
     )
   );
 
+-- Allow anyone to read images from active sessions (for real-time updates)
+CREATE POLICY "Anyone can read images from active sessions"
+  ON upload_session_images
+  FOR SELECT
+  TO anon, authenticated
+  USING (
+    upload_session_id IN (
+      SELECT id FROM upload_sessions 
+      WHERE is_active = true AND expires_at > now()
+    )
+  );
+
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_token ON upload_sessions(session_token);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_creator ON upload_sessions(creator_user_id);

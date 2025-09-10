@@ -260,6 +260,7 @@ export default function App() {
   const [showEndModal, setShowEndModal] = useState(false);
   const [currentSlideshow, setCurrentSlideshow] = useState<Slideshow | null>(null);
   const [userSlideshows, setUserSlideshows] = useState<Slideshow[]>([]);
+  const [anonymousSlideshows, setAnonymousSlideshows] = useState<Slideshow[]>([]);
   const [showDeleteConfirmationModal, setShowDeleteConfirmationModal] = useState(false);
   const [slideshowToDelete, setSlideshowToDelete] = useState<{ id: string; name: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -430,6 +431,14 @@ export default function App() {
       fetchUserSlideshows();
       fetchUserSubscriptionMessages();
       loadActiveUploadSession(); // Load active upload session
+      // Transfer anonymous slideshows to user account
+      transferAnonymousSlideshowsToUser();
+      // Reset form to start with blank slideshow when user logs in
+      handleNewSlideshow();
+    } else {
+      // Load anonymous slideshows for non-authenticated users
+      const anonymousSlideshows = getAnonymousSlideshows();
+      setAnonymousSlideshows(anonymousSlideshows);
     }
   }, [user, isPremium]);
 
@@ -513,6 +522,7 @@ export default function App() {
 
   const fetchUserSlideshows = async () => {
     if (!user) return;
+    console.log('Fetching slideshows for user:', user.id);
     const { data, error } = await supabase
       .from("slideshows")
       .select("*")
@@ -521,7 +531,141 @@ export default function App() {
     if (error) {
       console.error("Error fetching slideshows:", error);
     } else {
+      console.log('Fetched user slideshows:', data?.length || 0);
       setUserSlideshows(data || []);
+    }
+  };
+
+  // Anonymous slideshow management functions
+  const saveAnonymousSlideshow = (slideshow: Slideshow) => {
+    try {
+      const existingSlideshows = getAnonymousSlideshows();
+      const updatedSlideshows = [slideshow, ...existingSlideshows];
+      localStorage.setItem('anonymousSlideshows', JSON.stringify(updatedSlideshows));
+      setAnonymousSlideshows(updatedSlideshows);
+    } catch (error) {
+      console.error('Error saving anonymous slideshow:', error);
+      addToast({
+        type: 'error',
+        title: 'Save Failed',
+        message: 'There was an error saving your slideshow locally.'
+      });
+    }
+  };
+
+  const getAnonymousSlideshows = (): Slideshow[] => {
+    try {
+      const stored = localStorage.getItem('anonymousSlideshows');
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Error loading anonymous slideshows:', error);
+      return [];
+    }
+  };
+
+  const removeAnonymousSlideshow = (slideshowId: string) => {
+    try {
+      const existingSlideshows = getAnonymousSlideshows();
+      const updatedSlideshows = existingSlideshows.filter(s => s.id !== slideshowId);
+      localStorage.setItem('anonymousSlideshows', JSON.stringify(updatedSlideshows));
+      setAnonymousSlideshows(updatedSlideshows);
+    } catch (error) {
+      console.error('Error removing anonymous slideshow:', error);
+      addToast({
+        type: 'error',
+        title: 'Remove Failed',
+        message: 'There was an error removing the slideshow from your recent list.'
+      });
+    }
+  };
+
+  const transferAnonymousSlideshowsToUser = async () => {
+    if (!user) return;
+    
+    try {
+      const anonymousSlideshows = getAnonymousSlideshows();
+      console.log('Found anonymous slideshows to transfer:', anonymousSlideshows.length);
+      
+      if (anonymousSlideshows.length === 0) return;
+
+      // Create new slideshows for the user (simpler approach)
+      const createPromises = anonymousSlideshows.map(async (slideshow) => {
+        try {
+          console.log('Creating slideshow for user:', slideshow.id, 'to user:', user.id);
+          
+          // Create a new slideshow with the user's ID
+          const { data: newSlideshow, error: createError } = await supabase
+            .from('slideshows')
+            .insert([{
+              name: slideshow.name,
+              audio_url: slideshow.audio_url,
+              slide_urls: slideshow.slide_urls,
+              slide_duration: slideshow.slide_duration,
+              transition_type: slideshow.transition_type,
+              message: slideshow.message,
+              user_id: user.id
+            }])
+            .select()
+            .single();
+          
+          if (createError) {
+            console.error('Error creating slideshow:', createError);
+            return null;
+          }
+          
+          console.log('Successfully created slideshow for user:', newSlideshow.id);
+          return newSlideshow;
+        } catch (err) {
+          console.error('Error creating slideshow:', err);
+          return null;
+        }
+      });
+
+      const results = await Promise.all(createPromises);
+      const successfulTransfers = results.filter(Boolean);
+      console.log('Successfully transferred slideshows:', successfulTransfers.length);
+
+      if (successfulTransfers.length > 0) {
+        // Clear anonymous slideshows from localStorage
+        localStorage.removeItem('anonymousSlideshows');
+        setAnonymousSlideshows([]);
+        
+        // Add the transferred slideshows directly to the UI first
+        setUserSlideshows(prev => [...successfulTransfers, ...prev]);
+        
+        // Then refresh from database to ensure consistency
+        setTimeout(async () => {
+          console.log('Refreshing user slideshows from database...');
+          await fetchUserSlideshows();
+          
+          // If database fetch still returns 0, try a different approach
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from("slideshows")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false });
+          
+          if (!fallbackError && fallbackData && fallbackData.length > 0) {
+            console.log('Fallback fetch successful, found slideshows:', fallbackData.length);
+            setUserSlideshows(fallbackData);
+          } else {
+            console.log('Fallback fetch also returned 0 slideshows');
+          }
+        }, 1000);
+        
+        addToast({
+          type: 'success',
+          title: 'Slideshows Added!',
+          message: `${successfulTransfers.length} slideshow(s) have been added to your account.`
+        });
+      }
+    } catch (error) {
+      console.error('Error transferring anonymous slideshows:', error);
+      addToast({
+        type: 'error',
+        title: 'Transfer Failed',
+        message: 'There was an error transferring your slideshows. Please try again.'
+      });
     }
   };
 
@@ -771,9 +915,11 @@ export default function App() {
         data = result.data;
         error = result.error;
       } else {
+        console.log('Creating new slideshow with data:', slideshowData);
         const result = await supabase.from("slideshows").insert([slideshowData]).select().single();
         data = result.data;
         error = result.error;
+        console.log('Slideshow creation result:', { data, error });
       }
 
       if (error) {
@@ -788,6 +934,25 @@ export default function App() {
 
       // Update the saved state hash
       setLastSavedSlideshow(currentHash);
+
+      // If user is not authenticated, also save to localStorage for anonymous tracking
+      if (!user) {
+        console.log('Saving anonymous slideshow to localStorage:', data);
+        saveAnonymousSlideshow(data);
+        
+        // Verify the slideshow was saved to database
+        const { data: verifyData, error: verifyError } = await supabase
+          .from('slideshows')
+          .select('id, user_id')
+          .eq('id', data.id)
+          .single();
+        
+        if (verifyError) {
+          console.error('Error verifying slideshow in database:', verifyError);
+        } else {
+          console.log('Slideshow verified in database:', verifyData);
+        }
+      }
 
       if (openShareModal) {
       const url = `${window.location.origin}?view=${data.id}`;
@@ -814,6 +979,9 @@ export default function App() {
           title: editingSlideshowId ? 'Slideshow Updated!' : 'Slideshow Saved!',
           message: editingSlideshowId ? 'Your slideshow has been updated successfully.' : 'Your slideshow has been saved successfully.'
         });
+        
+        // Set editingSlideshowId to the saved slideshow ID so subsequent saves update the same slideshow
+        setEditingSlideshowId(data.id);
       }
 
       if (user) fetchUserSlideshows();
@@ -933,6 +1101,24 @@ export default function App() {
       console.error("Error loading slideshow for editing:", error);
       alert("Error loading slideshow for editing");
     }
+  };
+
+  const handleNewSlideshow = () => {
+    // Clear all form data to start fresh
+    setSlideshowName("");
+    setMessage("");
+    setSlideDuration(3);
+    setTransitionType("fade");
+    setImages([]);
+    setSlideshowPreviewImages([]);
+    setSelectedMusic(null);
+    setEditingSlideshowId(null);
+    
+    // Load random slideshow name and message
+    refreshSlideshowData();
+    
+    // Scroll to top of page
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const deleteSlideshow = async (id: string) => {
@@ -1152,12 +1338,89 @@ export default function App() {
     }
   };
 
+  // Optimized version with immediate UI feedback
+  const deactivateUploadSessionOptimized = async () => {
+    if (!activeUploadSession) return;
+
+    // Immediately update UI state for instant feedback
+    const previousSession = activeUploadSession;
+    const previousImages = [...collaborativeImages];
+    
+    setActiveUploadSession(null);
+    setCollaborativeImages([]);
+
+    // Handle cleanup in background without blocking UI
+    try {
+      // Update session status to inactive (fast operation)
+      const { error } = await supabase
+        .from('upload_sessions')
+        .update({ is_active: false })
+        .eq('id', previousSession.id);
+
+      if (error) {
+        console.error('Error updating session status:', error);
+        // Revert UI state if database update failed
+        setActiveUploadSession(previousSession);
+        setCollaborativeImages(previousImages);
+        return;
+      }
+
+      // Clean up images in background (slow operations)
+      if (previousImages.length > 0) {
+        // Run cleanup asynchronously without blocking
+        setTimeout(async () => {
+          try {
+            const imageIds = previousImages.map(img => img.id);
+            
+            // Delete from storage first
+            for (const collaborativeImage of previousImages) {
+              if (collaborativeImage.image_url.includes('supabase.co/storage')) {
+                try {
+                  const urlParts = collaborativeImage.image_url.split('/');
+                  const bucket = urlParts[urlParts.length - 3];
+                  const path = urlParts.slice(urlParts.length - 2).join('/');
+                  
+                  const { error: storageError } = await supabase.storage
+                    .from(bucket)
+                    .remove([path]);
+                  
+                  if (storageError) {
+                    console.error('Error deleting from storage:', storageError);
+                  }
+                } catch (storageError) {
+                  console.error('Error deleting from storage:', storageError);
+                }
+              }
+            }
+
+            // Then delete from database
+            const { error: deleteError } = await supabase
+              .from('upload_session_images')
+              .delete()
+              .in('id', imageIds);
+
+            if (deleteError) {
+              console.error('Error deleting collaborative images:', deleteError);
+            }
+          } catch (cleanupError) {
+            console.error('Error during background cleanup:', cleanupError);
+          }
+        }, 0);
+      }
+    } catch (error) {
+      console.error('Error deactivating upload session:', error);
+      // Revert UI state if something went wrong
+      setActiveUploadSession(previousSession);
+      setCollaborativeImages(previousImages);
+    }
+  };
+
   const handleToggleCollaboration = async () => {
     if (!user) return;
 
     if (activeUploadSession?.is_active) {
-      // Turn off - deactivate session
-      await deactivateUploadSession();
+      // Turn off - deactivate session with optimistic UI update
+      await deactivateUploadSessionOptimized();
     } else {
       // Turn on - always create new session to ensure clean state
       await createUploadSession();
@@ -1481,19 +1744,26 @@ export default function App() {
                   <button
                     onClick={handleToggleCollaboration}
                     disabled={isCreatingSession}
-                    className="relative inline-flex items-center cursor-pointer"
+                    className={`relative inline-flex items-center cursor-pointer ${
+                      isCreatingSession ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                   >
                     <div
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
                         activeUploadSession?.is_active ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
                       }`}
                     >
                       <div
-                        className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full transition-transform ${
+                        className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full transition-transform duration-200 ${
                           activeUploadSession?.is_active ? "translate-x-5" : "translate-x-0"
                         }`}
                       />
                     </div>
+                    {isCreatingSession && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                      </div>
+                    )}
                   </button>
                 </div>
                 
@@ -1867,9 +2137,18 @@ export default function App() {
           )}
 
           {/* Your Slideshows */}
-          {user && userSlideshows.length > 0 && (
+          {user && (
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 transition-colors">
-              <h2 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4">My Slideshows</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">My Slideshows</h2>
+                <button
+                  onClick={handleNewSlideshow}
+                  className="px-4 py-2 border border-blue-600 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors font-medium"
+                >
+                  + New
+                </button>
+              </div>
+              {userSlideshows.length > 0 && (
               <div className="space-y-3">
                 {userSlideshows.map((slideshow) => (
                   <div key={slideshow.id} className="flex flex-col p-4 bg-white dark:bg-gray-800 rounded-lg transition-colors">
@@ -1939,6 +2218,87 @@ export default function App() {
                             onClick={() => deleteSlideshow(slideshow.id)}
                             className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                             title="Delete slideshow"
+                          >
+                            <Trash2 className="w-6 h-6" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              )}
+            </div>
+          )}
+
+          {/* Anonymous Slideshows - shown for non-authenticated users */}
+          {!user && anonymousSlideshows.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 transition-colors">
+              <h2 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                <Clock className="w-6 h-6 text-blue-600" />
+                Your Recent Slideshows
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                Sign up or log in to permanently save these slideshows to your account.
+              </p>
+              <div className="space-y-3">
+                {anonymousSlideshows.map((slideshow) => (
+                  <div key={slideshow.id} className="flex flex-col p-4 bg-gray-50 dark:bg-gray-700 rounded-lg transition-colors">
+                    <div className="w-full">
+                      <h3 className="font-medium text-gray-800 dark:text-white">{slideshow.name}</h3>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm text-gray-600 dark:text-gray-300 flex-grow min-w-0">
+                          {slideshow.slide_urls.length} slides • Created{" "}
+                          {new Date(slideshow.created_at).toLocaleDateString()} at{" "}
+                          {new Date(slideshow.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              const url = `${window.location.origin}?view=${slideshow.id}`;
+                              window.open(url, "_blank", "noopener,noreferrer");
+                            }}
+                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            title="View slideshow"
+                          >
+                            <Eye className="w-6 h-6" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              const url = `${window.location.origin}?view=${slideshow.id}`;
+                              navigator.clipboard
+                                .writeText(url)
+                                .then(() => {
+                                  setCopiedSlideshowId(slideshow.id);
+                                  setTimeout(() => setCopiedSlideshowId(null), 2000);
+                                })
+                                .catch(() => {
+                                  const textArea = document.createElement("textarea");
+                                  textArea.value = url;
+                                  document.body.appendChild(textArea);
+                                  textArea.select();
+                                  document.execCommand("copy");
+                                  document.body.removeChild(textArea);
+                                  setCopiedSlideshowId(slideshow.id);
+                                  setTimeout(() => setCopiedSlideshowId(null), 2000);
+                                });
+                            }}
+                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            title="Copy share link"
+                          >
+                            {copiedSlideshowId === slideshow.id ? <Check className="w-6 h-6" /> : <Copy className="w-6 h-6" />}
+                          </button>
+                          <button
+                            onClick={() => {
+                              removeAnonymousSlideshow(slideshow.id);
+                              addToast({
+                                type: 'success',
+                                title: 'Slideshow Removed',
+                                message: 'Slideshow has been removed from your recent list.'
+                              });
+                            }}
+                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                            title="Remove from recent"
                           >
                             <Trash2 className="w-6 h-6" />
                           </button>
