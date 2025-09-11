@@ -47,7 +47,7 @@ if (currentPath === '/terms') {
   });
 } else if (currentPath === '/upload' || sessionParam) {
   // Render the Collaborative Upload page
-  // Check for either /upload path or session parameter (for Render deployment)
+  // Check for either /upload path or session parameter (works for both local and deployed)
   import('./components/CollaborativeUploadPage').then(({ default: CollaborativeUploadPage }) => {
     createRoot(document.getElementById('root')!).render(
       <StrictMode>

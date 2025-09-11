@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Share2, Copy, Check, Users, Upload, Mail, User, Link, Calendar, Image, AlertCircle, ExternalLink, QrCode } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { X, Share2, Copy, Check, Upload, Image, QrCode } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
@@ -34,73 +34,13 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
   const { user } = useAuth();
   const [activeSession, setActiveSession] = useState<UploadSession | null>(null);
   const [uploadedImages, setUploadedImages] = useState<UploadSessionImage[]>([]);
-  const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showQrCode, setShowQrCode] = useState(false);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (isOpen && user && !infoOnly) {
-      loadActiveSession();
-      
-      // Set up real-time subscription to session changes
-      const sessionChannel = supabase
-        .channel('upload_sessions_changes')
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'upload_sessions',
-            filter: `creator_user_id=eq.${user.id}`
-          },
-          (payload) => {
-            if (payload.new && activeSession && payload.new.id === activeSession.id) {
-              setActiveSession(payload.new as UploadSession);
-            }
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'upload_session_images'
-          },
-          (payload) => {
-            if (activeSession && payload.new && payload.new.upload_session_id === activeSession.id) {
-              loadSessionImages(activeSession.id);
-              // Refresh session data to get updated counts
-              loadActiveSession();
-            }
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'upload_session_images'
-          },
-          (payload) => {
-            if (activeSession && payload.old && payload.old.upload_session_id === activeSession.id) {
-              loadSessionImages(activeSession.id);
-              // Refresh session data to get updated counts
-              loadActiveSession();
-            }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        sessionChannel.unsubscribe();
-      };
-    }
-  }, [isOpen, user, activeSession?.id]);
-
-  const loadActiveSession = async () => {
+  const loadActiveSession = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -124,13 +64,87 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
         setActiveSession(sessionData);
         await loadSessionImages(sessionData.id);
       }
-    } catch (error) {
-      console.error('Error loading active session:', error);
+    } catch (err) {
+      console.error('Error loading active session:', err);
       setError('Failed to load upload session');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (isOpen && user && !infoOnly) {
+      loadActiveSession();
+      
+      // Set up real-time subscription to session changes
+      const sessionChannel = supabase
+        .channel('upload_sessions_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'upload_sessions',
+            filter: `creator_user_id=eq.${user.id}`
+          },
+          (payload) => {
+            if (payload.new) {
+              setActiveSession(prev => {
+                if (prev && payload.new && payload.new.id === prev.id) {
+                  return payload.new as UploadSession;
+                }
+                return prev;
+              });
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'upload_session_images'
+          },
+          (payload) => {
+            if (payload.new) {
+              setActiveSession(prev => {
+                if (prev && payload.new && payload.new.upload_session_id === prev.id) {
+                  loadSessionImages(prev.id);
+                  // Refresh session data to get updated counts
+                  loadActiveSession();
+                }
+                return prev;
+              });
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'upload_session_images'
+          },
+          (payload) => {
+            if (payload.old) {
+              setActiveSession(prev => {
+                if (prev && payload.old && payload.old.upload_session_id === prev.id) {
+                  loadSessionImages(prev.id);
+                  // Refresh session data to get updated counts
+                  loadActiveSession();
+                }
+                return prev;
+              });
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        sessionChannel.unsubscribe();
+      };
+    }
+  }, [isOpen, user, infoOnly, loadActiveSession]);
 
   const loadSessionImages = async (sessionId: string) => {
     try {
@@ -142,71 +156,13 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
 
       if (error) throw error;
       setUploadedImages(data || []);
-    } catch (error) {
-      console.error('Error loading session images:', error);
+    } catch (err) {
+      console.error('Error loading session images:', err);
     }
   };
 
-  const createUploadSession = async () => {
-    if (!user) return;
-
-    try {
-      setIsCreating(true);
-      setError(null);
-
-      const { data, error } = await supabase
-        .from('upload_sessions')
-        .insert([{
-          creator_user_id: user.id,
-          max_uploads: 100,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days from now
-        }])
-        .select()
-        .single();
 
 
-
-      if (error) {
-        throw error;
-      }
-      setActiveSession(data);
-      setUploadedImages([]);
-    } catch (error) {
-      setError('Failed to create upload session');
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const handleToggleSession = async () => {
-    if (!user) return;
-
-    if (activeSession?.is_active) {
-      // Turn off - deactivate session
-      await deactivateSession();
-    } else {
-      // Turn on - always create new session to ensure clean state
-      await createUploadSession();
-    }
-  };
-
-  const deactivateSession = async () => {
-    if (!activeSession) return;
-
-    try {
-      const { error } = await supabase
-        .from('upload_sessions')
-        .update({ is_active: false })
-        .eq('id', activeSession.id);
-
-      if (error) throw error;
-      setActiveSession(null);
-      setUploadedImages([]);
-    } catch (error) {
-      console.error('Error deactivating session:', error);
-      setError('Failed to deactivate session');
-    }
-  };
 
   const toggleImageSelection = (imageId: string) => {
     setSelectedImages(prev => {
@@ -260,8 +216,8 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
       }
       
       onClose();
-    } catch (error) {
-      console.error('Error adding images to slideshow:', error);
+    } catch (err) {
+      console.error('Error adding images to slideshow:', err);
       setError('Failed to add images to slideshow');
     }
   };
@@ -275,7 +231,7 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
       await navigator.clipboard.writeText(shareLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
+    } catch {
       // Fallback for browsers that don't support clipboard API
       const textArea = document.createElement('textarea');
       textArea.value = shareLink;
@@ -314,7 +270,7 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
       }
 
       const svgData = new XMLSerializer().serializeToString(svg);
-      const img = new Image();
+      const img = document.createElement('img');
       
       img.onload = () => {
         try {
@@ -332,8 +288,8 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
           
           // Optional: Show success message
 
-        } catch (error) {
-          console.error('Error creating download:', error);
+        } catch {
+          console.error('Error creating download');
         }
       };
       
@@ -342,8 +298,8 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
       };
       
       img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
-    } catch (error) {
-      console.error('Error downloading QR code:', error);
+    } catch {
+      console.error('Error downloading QR code');
     }
   };
 
@@ -462,7 +418,7 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
                                     <div className="flex items-center justify-between">
                   <span className="text-gray-600 dark:text-gray-300">Images uploaded:</span>
                   <span className="font-medium text-gray-800 dark:text-white">
-                    {uploadedImages.length} / {activeSession.max_uploads}
+                    {Math.min(uploadedImages.length, activeSession.max_uploads)} / {activeSession.max_uploads}
                   </span>
                 </div>
 
@@ -474,7 +430,7 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
                   <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
                     <div
                       className="bg-gradient-to-r from-blue-600 to-cyan-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(activeSession.current_uploads / activeSession.max_uploads) * 100}%` }}
+                      style={{ width: `${Math.min(100, (Math.min(uploadedImages.length, activeSession.max_uploads) / activeSession.max_uploads) * 100)}%` }}
                     />
                   </div>
                 </div>
@@ -667,12 +623,6 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
                   </div>
                 </div>
 
-                {isCreating && (
-                  <div className="text-center py-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                    <p className="text-gray-600 dark:text-gray-300">Creating upload session...</p>
-                  </div>
-                )}
               </div>
             )}
           </div>

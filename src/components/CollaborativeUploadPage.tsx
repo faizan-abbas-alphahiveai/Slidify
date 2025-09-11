@@ -233,19 +233,19 @@ export default function CollaborativeUploadPage() {
       return;
     }
 
-    // Check session upload limit (100 images total)
-    const remainingSlots = session.max_uploads - session.current_uploads;
+    // Check session upload limit (100 images total) - use actual count
+    const remainingSlots = session.max_uploads - Math.min(session.current_uploads, session.max_uploads);
     const availableSlots = Math.max(0, remainingSlots - selectedImages.length);
     
     if (availableSlots <= 0) {
-      setError(`Upload limit reached! This session allows a maximum of ${session.max_uploads} images. Currently at ${session.current_uploads}/${session.max_uploads}.`);
+      setError(`Upload limit reached! This session allows a maximum of ${session.max_uploads} images. Currently at ${Math.min(session.current_uploads, session.max_uploads)}/${session.max_uploads}.`);
       return;
     }
     
     const filesToAdd = validFiles.slice(0, availableSlots);
     
     if (filesToAdd.length < validFiles.length) {
-      setError(`Only ${filesToAdd.length} of ${validFiles.length} files can be added. Session limit: ${session.current_uploads}/${session.max_uploads} images.`);
+      setError(`Only ${filesToAdd.length} of ${validFiles.length} files can be added. Session limit: ${Math.min(session.current_uploads, session.max_uploads)}/${session.max_uploads} images.`);
     }
     
     setSelectedImages(prev => [...prev, ...filesToAdd]);
@@ -262,16 +262,47 @@ export default function CollaborativeUploadPage() {
     e.preventDefault();
     if (!session || !sessionToken || selectedImages.length === 0) return;
 
-    // Check if upload would exceed the session limit
-    const totalUploads = session.current_uploads + selectedImages.length;
+    // Check if upload would exceed the session limit - use actual count
+    const actualCurrentUploads = Math.min(session.current_uploads, session.max_uploads);
+    const totalUploads = actualCurrentUploads + selectedImages.length;
     if (totalUploads > session.max_uploads) {
-      setError(`Upload would exceed the limit of ${session.max_uploads} images. You can only upload ${session.max_uploads - session.current_uploads} more images.`);
+      setError(`Upload would exceed the limit of ${session.max_uploads} images. You can only upload ${session.max_uploads - actualCurrentUploads} more images.`);
       return;
     }
 
     try {
       setIsUploading(true);
       setError(null);
+
+      // Double-check session limit before uploading (server-side validation)
+      const { data: currentSession, error: sessionError } = await supabase
+        .from('upload_sessions')
+        .select('max_uploads')
+        .eq('id', session.id)
+        .eq('is_active', true)
+        .single();
+
+      if (sessionError) throw sessionError;
+
+      if (!currentSession) {
+        setError('Upload session not found or has been deactivated.');
+        return;
+      }
+
+      // Count actual uploaded images instead of relying on current_uploads field
+      const { count: actualImageCount, error: countError } = await supabase
+        .from('upload_session_images')
+        .select('*', { count: 'exact', head: true })
+        .eq('upload_session_id', session.id);
+
+      if (countError) throw countError;
+
+      const currentImageCount = actualImageCount || 0;
+
+      if (currentImageCount + selectedImages.length > currentSession.max_uploads) {
+        setError(`Upload limit reached! This session allows a maximum of ${currentSession.max_uploads} images. Currently at ${currentImageCount}/${currentSession.max_uploads}.`);
+        return;
+      }
 
       // Upload images to storage
       const uploadPromises = selectedImages.map(async (file) => {
@@ -290,19 +321,29 @@ export default function CollaborativeUploadPage() {
 
       const imageUrls = await Promise.all(uploadPromises);
 
-      // Save image records to database
-      const imageRecords = imageUrls.map(url => ({
-        upload_session_id: session.id,
-        image_url: url,
-        uploaded_by_name: uploaderName.trim(),
-        uploaded_by_email: uploaderEmail.trim()
-      }));
+      // Save image records to database using the safe insert function
+      const insertPromises = imageUrls.map(async (url) => {
+        const { data, error } = await supabase.rpc('safe_insert_upload_session_image', {
+          p_upload_session_id: session.id,
+          p_image_url: url,
+          p_uploaded_by_name: uploaderName.trim(),
+          p_uploaded_by_email: uploaderEmail.trim()
+        });
 
-      const { error: dbError } = await supabase
-        .from('upload_session_images')
-        .insert(imageRecords);
+        if (error) {
+          if (error.message.includes('Upload limit reached')) {
+            throw new Error(`Upload limit reached! This session allows a maximum of ${currentSession.max_uploads} images.`);
+          } else if (error.message.includes('not found or has expired')) {
+            throw new Error('Upload session not found or has expired.');
+          } else {
+            throw error;
+          }
+        }
 
-      if (dbError) throw dbError;
+        return data;
+      });
+
+      await Promise.all(insertPromises);
 
       setSuccess(true);
       setSelectedImages([]);
@@ -361,9 +402,20 @@ export default function CollaborativeUploadPage() {
       return;
     }
 
-    const remainingSlots = session.max_uploads - session.current_uploads;
+    // Check session upload limit (100 images total) - use actual count
+    const remainingSlots = session.max_uploads - Math.min(session.current_uploads, session.max_uploads);
     const availableSlots = Math.max(0, remainingSlots - selectedImages.length);
+    
+    if (availableSlots <= 0) {
+      setError(`Upload limit reached! This session allows a maximum of ${session.max_uploads} images. Currently at ${Math.min(session.current_uploads, session.max_uploads)}/${session.max_uploads}.`);
+      return;
+    }
+    
     const filesToAdd = validFiles.slice(0, availableSlots);
+    
+    if (filesToAdd.length < validFiles.length) {
+      setError(`Only ${filesToAdd.length} of ${validFiles.length} files can be added. Session limit: ${Math.min(session.current_uploads, session.max_uploads)}/${session.max_uploads} images.`);
+    }
     
     setSelectedImages(prev => [...prev, ...filesToAdd]);
     
@@ -456,7 +508,8 @@ export default function CollaborativeUploadPage() {
     );
   }
 
-  const remainingSlots = session.max_uploads - session.current_uploads;
+  const actualCurrentUploads = Math.min(session.current_uploads, session.max_uploads);
+  const remainingSlots = session.max_uploads - actualCurrentUploads;
   const canUploadMore = remainingSlots > 0 && selectedImages.length < Math.min(remainingSlots, 20);
   
   const isUploadValid = () => {
@@ -533,12 +586,12 @@ export default function CollaborativeUploadPage() {
           <div className="mb-4">
             <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
               <span>Upload Progress</span>
-              <span>{session.current_uploads} / {session.max_uploads}</span>
+              <span>{actualCurrentUploads} / {session.max_uploads}</span>
             </div>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
               <div 
                 className="h-2 rounded-full transition-all duration-300 bg-blue-500"
-                style={{ width: `${Math.min(100, (session.current_uploads / session.max_uploads) * 100)}%` }}
+                style={{ width: `${Math.min(100, (actualCurrentUploads / session.max_uploads) * 100)}%` }}
               />
             </div>
           </div>
