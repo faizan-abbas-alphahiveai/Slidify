@@ -2067,11 +2067,11 @@ export default function App() {
               <button
                 onClick={() => saveSlideshow(false)}
                 disabled={isSaving || isCreatingLink || slideshowPreviewImages.length === 0 || !slideshowName.trim()}
-                className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-4 px-6 rounded-lg hover:from-blue-700 hover:to-cyan-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 text-lg font-semibold shadow-lg"
+                className="flex-1 border border-blue-600 text-blue-600 py-4 px-6 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 text-lg font-semibold shadow-lg"
               >
                 {isSaving ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
                     {editingSlideshowId ? "Saving..." : "Saving..."}
                   </>
                 ) : (
@@ -2127,7 +2127,7 @@ export default function App() {
                 <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">My Slideshows</h2>
                 <button
                   onClick={handleNewSlideshow}
-                  className="px-4 py-2 border border-blue-600 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors font-medium"
+                  className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors font-medium"
                 >
                   + New
                 </button>
@@ -2281,7 +2281,7 @@ export default function App() {
                                 message: 'Slideshow has been removed from your recent list.'
                               });
                             }}
-                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                             title="Remove from recent"
                           >
                             <Trash2 className="w-6 h-6" />

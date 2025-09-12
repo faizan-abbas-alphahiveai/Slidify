@@ -110,8 +110,8 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
               setActiveSession(prev => {
                 if (prev && payload.new && payload.new.upload_session_id === prev.id) {
                   loadSessionImages(prev.id);
-                  // Refresh session data to get updated counts
-                  loadActiveSession();
+              // Refresh session data to get updated counts
+              loadActiveSession();
                 }
                 return prev;
               });
@@ -130,8 +130,8 @@ export default function CollaborativeUploadModal({ isOpen, onClose, onImagesAdde
               setActiveSession(prev => {
                 if (prev && payload.old && payload.old.upload_session_id === prev.id) {
                   loadSessionImages(prev.id);
-                  // Refresh session data to get updated counts
-                  loadActiveSession();
+              // Refresh session data to get updated counts
+              loadActiveSession();
                 }
                 return prev;
               });

@@ -245,7 +245,7 @@ export default function CollaborativeUploadPage() {
     const filesToAdd = validFiles.slice(0, availableSlots);
     
     if (filesToAdd.length < validFiles.length) {
-      setError(`Only ${filesToAdd.length} of ${validFiles.length} files can be added. Session limit: ${Math.min(session.current_uploads, session.max_uploads)}/${session.max_uploads} images.`);
+      setError(`Upload limit is ${session.max_uploads} files. Please contact the slideshow creator.`);
     }
     
     setSelectedImages(prev => [...prev, ...filesToAdd]);
@@ -414,7 +414,7 @@ export default function CollaborativeUploadPage() {
     const filesToAdd = validFiles.slice(0, availableSlots);
     
     if (filesToAdd.length < validFiles.length) {
-      setError(`Only ${filesToAdd.length} of ${validFiles.length} files can be added. Session limit: ${Math.min(session.current_uploads, session.max_uploads)}/${session.max_uploads} images.`);
+      setError(`Upload limit is ${session.max_uploads} files. Please contact the slideshow creator.`);
     }
     
     setSelectedImages(prev => [...prev, ...filesToAdd]);
@@ -610,7 +610,7 @@ export default function CollaborativeUploadPage() {
             <div className="text-center py-8">
               <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">
-                Upload Session Full
+                Upload Limit Reached
               </h3>
               <p className="text-gray-600 dark:text-gray-300 mb-3">
                 This slideshow has reached its maximum capacity of {session.max_uploads} images.
